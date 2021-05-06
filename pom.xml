@@ -218,6 +218,12 @@
         <groupId>com.ceph.fs</groupId>
         <artifactId>cephfs-hadoop</artifactId>
         <version>${cephfs-hadoop.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>com.ceph</groupId>
+            <artifactId>libcephfs</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>com.ceph</groupId>
