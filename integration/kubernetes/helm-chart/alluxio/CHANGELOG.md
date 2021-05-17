@@ -167,3 +167,15 @@
 0.6.18
 
 - Add support for Node tolerations
+
+0.6.19
+
+- Add serviceAccountName in Master, Worker, and FUSE Pods
+
+0.6.20
+
+- Add Master StatefulSet podManagementPolicy Parallel (see Issue [#13323](https://github.com/Alluxio/alluxio/issues/13323))
+
+0.6.21
+
+- Change logserver PVC default selectors to empty, so dynamic provisioning works by default configuration.
