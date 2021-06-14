@@ -52,6 +52,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -149,67 +150,86 @@ public class HiveDatabase implements UnderDatabase {
   private PathTranslator mountAlluxioPaths(Table table, List<Partition> partitions,
       UdbBypassSpec bypassSpec)
       throws IOException {
-    String tableName = table.getTableName();
-    AlluxioURI ufsUri;
-    AlluxioURI alluxioUri = mUdbContext.getTableLocation(tableName);
-    String hiveUfsUri = table.getSd().getLocation();
+    final String tableName = table.getTableName();
+    final String tableUfsPath = table.getSd().getLocation();
+    final AlluxioURI tableUfsUri = new AlluxioURI(tableUfsPath);
+    final AlluxioURI tableAlluxioUri = mUdbContext.getTableLocation(tableName);
 
     try {
       PathTranslator pathTranslator = new PathTranslator();
       if (bypassSpec.hasFullTable(tableName)) {
-        pathTranslator.addMapping(hiveUfsUri, hiveUfsUri);
+        pathTranslator.addMapping(tableUfsPath, tableUfsPath);
         return pathTranslator;
       }
-      ufsUri = new AlluxioURI(table.getSd().getLocation());
       pathTranslator.addMapping(
           UdbUtils.mountAlluxioPath(tableName,
-              ufsUri,
-              alluxioUri,
+              tableUfsUri,
+              tableAlluxioUri,
               mUdbContext,
               mConfiguration),
-          hiveUfsUri);
+          tableUfsPath);
 
+      HashSet<Partition> colocatedPartitions = new HashSet<>(partitions.size());
       for (Partition part : partitions) {
-        AlluxioURI partitionUri;
-        if (part.getSd() != null && part.getSd().getLocation() != null) {
-          partitionUri = new AlluxioURI(part.getSd().getLocation());
-          if (!mConfiguration.getBoolean(Property.ALLOW_DIFF_PART_LOC_PREFIX)
-              && !ufsUri.isAncestorOf(partitionUri)) {
-            continue;
-          }
-          hiveUfsUri = part.getSd().getLocation();
-          String partName = part.getValues().toString();
-          try {
-            partName = Warehouse.makePartName(table.getPartitionKeys(), part.getValues());
-          } catch (MetaException e) {
-            LOG.warn("Error making partition name for table {}, partition {}", tableName,
-                part.getValues().toString());
-          }
-          if (bypassSpec.hasPartition(tableName, partName)) {
-            pathTranslator.addMapping(partitionUri.getPath(), partitionUri.getPath());
-            continue;
-          }
-          alluxioUri = new AlluxioURI(PathUtils.concatPath(
-              mUdbContext.getTableLocation(tableName).getPath(), partName));
-
-          // mount partition path if it is not already mounted as part of the table path mount
+        if (part.getSd() == null || part.getSd().getLocation() == null) {
+          continue;
+        }
+        String partitionUfsPath = part.getSd().getLocation();
+        AlluxioURI partitionUfsUri = new AlluxioURI(partitionUfsPath);
+        String partName = makePartName(table, part);
+        if (bypassSpec.hasPartition(tableName, partName)) {
+          pathTranslator.addMapping(partitionUri.getPath(), partitionUri.getPath());
+          continue;
+        }
+        if (tableUfsUri.isAncestorOf(partitionUfsUri)) {
+          // case 1: partition is located in the directory tree of the table
+          // action: put the partition into the group
+          colocatedPartitions.add(part);
+        } else if (mConfiguration.getBoolean(Property.ALLOW_DIFF_PART_LOC_PREFIX)) {
+          // case 2: partition is NOT located in the directory tree of the table,
+          // but config says mount it anyway
+          // action: mount it individually
+          AlluxioURI partitionAlluxioUri = new AlluxioURI(PathUtils.concatPath(
+              tableAlluxioUri.getPath(), partName));
           pathTranslator.addMapping(
               UdbUtils.mountAlluxioPath(tableName,
-                  partitionUri,
-                  alluxioUri,
+                  partitionUfsUri,
+                  partitionAlluxioUri,
                   mUdbContext,
                   mConfiguration),
-              hiveUfsUri);
+              partitionUfsPath);
         }
+        // case 3: not co-located partition and table, and config not allowing them
+        // action: ignore it
+      }
+
+      // add mappings for all colocated partitions
+      for (Partition part : colocatedPartitions) {
+        String partName = makePartName(table, part);
+        pathTranslator.addMapping(
+            PathUtils.concatPath(tableAlluxioUri.getPath(), partName),
+            part.getSd().getLocation()
+        );
       }
       return pathTranslator;
     } catch (AlluxioException e) {
-      throw new IOException(
-          "Failed to mount table location. tableName: " + tableName
-              + " hiveUfsLocation: " + hiveUfsUri
-              + " AlluxioLocation: " + alluxioUri
-              + " error: " + e.getMessage(), e);
+      throw new IOException(String.format(
+          "Failed to mount table location. " +
+          "tableName: %s, hiveUfsLocation: %s, AlluxioLocation: %s, error: %s",
+          tableName, tableUfsPath, tableAlluxioUri, e.getMessage()),
+          e);
     }
+  }
+
+  private static String makePartName(Table table, Partition partition) {
+    String partName = partition.getValues().toString();
+    try {
+      partName = Warehouse.makePartName(table.getPartitionKeys(), partition.getValues());
+    } catch (MetaException e) {
+      LOG.warn("Error making partition name for table {}, partition {}", table.getTableName(),
+          partition.getValues().toString());
+    }
+    return partName;
   }
 
   @Override
