@@ -214,8 +214,8 @@ public class HiveDatabase implements UnderDatabase {
       return pathTranslator;
     } catch (AlluxioException e) {
       throw new IOException(String.format(
-          "Failed to mount table location. " +
-          "tableName: %s, hiveUfsLocation: %s, AlluxioLocation: %s, error: %s",
+          "Failed to mount table location. "
+          + "tableName: %s, hiveUfsLocation: %s, AlluxioLocation: %s, error: %s",
           tableName, tableUfsPath, tableAlluxioUri, e.getMessage()),
           e);
     }
