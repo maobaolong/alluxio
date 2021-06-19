@@ -183,7 +183,7 @@ public class HiveDatabase implements UnderDatabase {
     }
   }
 
-  private void mount(List<Table> tables, boolean bypass)
+  private void mount(List<Table> tables, UdbBypassSpec bypassSpec)
       throws IOException {
     HashMultimap<AlluxioURI, Table> colocatedTables = HashMultimap.create();
     for (Table table : tables) {
@@ -222,7 +222,7 @@ public class HiveDatabase implements UnderDatabase {
     }
   }
 
-  private void mount(Table table, List<Partition> partitions, boolean bypass)
+  private void mount(Table table, List<Partition> partitions, UdbBypassSpec bypassSpec)
       throws IOException {
     final String tableName = table.getTableName();
     final String tableUfsPath = table.getSd().getLocation();
