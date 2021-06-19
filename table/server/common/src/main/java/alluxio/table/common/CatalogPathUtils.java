@@ -79,14 +79,14 @@ public class CatalogPathUtils {
   }
 
   /**
-   * Escape a ufs path to be embedded in a fragment path.
+   * Escape a ufs URI to be embedded in a fragment path.
    *
-   * @param fragmentUfsUri fragment path to escape
-   * @return escaped fragment path
+   * @param fragmentUfsUri fragment URI to escape
+   * @return escaped fragment URI
    */
   public static String escapeFragmentUfsPath(AlluxioURI fragmentUfsUri) {
     // TODO(bowen): implement a real escaping algorithm
     // e.g. path = path.replaceAll("/", "_")
-    return fragmentUfsUri.getPath();
+    return fragmentUfsUri.toString();
   }
 }
