@@ -29,11 +29,18 @@ import org.slf4j.LoggerFactory;
  *                                                  /_internal_/...
  * /<catalog base dir>/<dbName2>/tables/<tableName3>/<udbType>/...
  *                                                  /_internal_/...
+ *
+ * Catalog paths for fragments look like:
+ * /<catalog base dir>/<dbName2>/fragments/<fragment1>/...
+ *                                        /<fragment2>/...
+ * A fragment of a database is a UFS location that stores a part of the tables
+ * of the database. A UDB may be split into several fragments.
  */
 public class CatalogPathUtils {
   private static final Logger LOG = LoggerFactory.getLogger(CatalogPathUtils.class);
   private static final String TABLES_ROOT = "tables";
   private static final String INTERNAL_ROOT = "_internal_";
+  private static final String FRAGMENTS_ROOT = "fragments";
 
   private CatalogPathUtils() {} // prevent instantiation
 
@@ -58,5 +65,28 @@ public class CatalogPathUtils {
     return new AlluxioURI(PathUtils
         .concatPath(ServerConfiguration.get(PropertyKey.TABLE_CATALOG_PATH), dbName, TABLES_ROOT,
             tableName, INTERNAL_ROOT));
+  }
+
+  /**
+   * @param dbName the database name
+   * @param fragmentUri fragment ufs uri
+   * @return the AlluxioURI for the fragments path of the database
+   */
+  public static AlluxioURI getFragmentsPath(String dbName, AlluxioURI fragmentUri) {
+    return new AlluxioURI(PathUtils.concatPath(
+        ServerConfiguration.get(PropertyKey.TABLE_CATALOG_PATH), dbName, FRAGMENTS_ROOT,
+        escapeFragmentUfsPath(fragmentUri)));
+  }
+
+  /**
+   * Escape a ufs path to be embedded in a fragment path.
+   *
+   * @param fragmentUfsUri fragment path to escape
+   * @return escaped fragment path
+   */
+  public static String escapeFragmentUfsPath(AlluxioURI fragmentUfsUri) {
+    // TODO(bowen): implement a real escaping algorithm
+    // e.g. path = path.replaceAll("/", "_")
+    return fragmentUfsUri.getPath();
   }
 }
