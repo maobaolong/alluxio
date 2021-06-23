@@ -77,6 +77,7 @@ public class HiveDatabase implements UnderDatabase {
   private final String mHiveDbName;
   /** path translator that records mappings between ufs paths and Alluxio paths. */
   private final PathTranslator mPathTranslator;
+  private boolean mIsMounted;
 
   private static final HiveClientPoolCache CLIENT_POOL_CACHE = new HiveClientPoolCache();
   /** Hive client is not thread-safe, so use a client pool for concurrency. */
@@ -90,6 +91,7 @@ public class HiveDatabase implements UnderDatabase {
     mHiveDbName = hiveDbName;
     mClientPool = CLIENT_POOL_CACHE.getPool(connectionUri);
     mPathTranslator = new PathTranslator();
+    mIsMounted = false;
   }
 
   /**
@@ -196,27 +198,27 @@ public class HiveDatabase implements UnderDatabase {
         continue;
       }
       AlluxioURI tableUfsUri = new AlluxioURI(tableUfsPath);
-      AlluxioURI parentUfsUri = tableUfsUri.getParent();
-      colocatedTables.put(parentUfsUri, table);
+      AlluxioURI rootUfsUri = new AlluxioURI(tableUfsUri, "/", false);
+      colocatedTables.put(rootUfsUri, table);
     }
     for (Map.Entry<AlluxioURI, Collection<Table>> entry : colocatedTables.asMap().entrySet()) {
-      AlluxioURI parentUfsUri = entry.getKey();
+      AlluxioURI rootUfsUri = entry.getKey();
       Collection<Table> childTables = entry.getValue();
-      AlluxioURI fragmentAlluxioUri = mUdbContext.getFragmentLocation(parentUfsUri);
+      AlluxioURI fragmentAlluxioUri = mUdbContext.getFragmentLocation(rootUfsUri);
       try {
         mPathTranslator.addMapping(
             UdbUtils.mountFragment(mHiveDbName,
-                parentUfsUri,
+                rootUfsUri,
                 fragmentAlluxioUri,
                 mUdbContext,
                 mConfiguration),
-            parentUfsUri.toString()
+            rootUfsUri.toString()
         );
       } catch (AlluxioException e) {
         throw new IOException(String.format(
             "Failed to mount database fragment. "
             + "hiveUfsLocation: %s, AlluxioLocation: %s, error: %s",
-            parentUfsUri, fragmentAlluxioUri, e.getMessage()),
+            rootUfsUri, fragmentAlluxioUri, e.getMessage()),
             e);
       }
     }
@@ -227,6 +229,7 @@ public class HiveDatabase implements UnderDatabase {
     final String tableName = table.getTableName();
     final String tableUfsPath = table.getSd().getLocation();
     final AlluxioURI tableUfsUri = new AlluxioURI(tableUfsPath);
+    final AlluxioURI rootUfsUri = new AlluxioURI(tableUfsUri, "/", false);
     // or: tableAlluxioUri = mUdbContext.getTableLocation(tableName) ???
     final AlluxioURI tableAlluxioUri = new AlluxioURI(mPathTranslator.toAlluxioPath(tableUfsPath));
 
@@ -244,7 +247,7 @@ public class HiveDatabase implements UnderDatabase {
       }
       boolean isAncestor;
       try {
-        isAncestor = tableUfsUri.isAncestorOf(partitionUfsUri);
+        isAncestor = rootUfsUri.isAncestorOf(partitionUfsUri);
       } catch (InvalidPathException e) {
         throw new IOException(e);
       }
@@ -276,15 +279,6 @@ public class HiveDatabase implements UnderDatabase {
       }
       // case 3: not co-located partition and table, and config not allowing them
       // action: ignore it
-    }
-
-    // add mappings for all colocated partitions
-    for (Partition part : colocatedPartitions) {
-      String partName = makePartName(table, part);
-      mPathTranslator.addMapping(
-          PathUtils.concatPath(tableAlluxioUri.getPath(), partName),
-          part.getSd().getLocation()
-      );
     }
   }
 
@@ -340,7 +334,11 @@ public class HiveDatabase implements UnderDatabase {
         }
       }
 
-      mount(bypassSpec);
+      if (!mIsMounted) {
+        // TODO(bowen): bypass spec updates are ignored
+        mount(bypassSpec);
+        mIsMounted = true;
+      }
       List<ColumnStatisticsInfo> colStats =
           columnStats.stream().map(HiveUtils::toProto).collect(Collectors.toList());
       // construct table layout
