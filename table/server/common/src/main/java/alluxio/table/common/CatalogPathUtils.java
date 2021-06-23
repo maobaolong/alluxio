@@ -85,8 +85,13 @@ public class CatalogPathUtils {
    * @return escaped fragment URI
    */
   public static String escapeFragmentUfsPath(AlluxioURI fragmentUfsUri) {
-    // TODO(bowen): implement a real escaping algorithm
-    // e.g. path = path.replaceAll("/", "_")
-    return fragmentUfsUri.toString();
+    String scheme = fragmentUfsUri.getScheme();
+    scheme = scheme == null || scheme.isEmpty() ? "none" : scheme;
+    String authority = fragmentUfsUri.getAuthority().toString();
+    authority = authority == null || authority.isEmpty() ? "none" : authority;
+    String escapedFragmentPath = String.format("%s_%s", scheme, authority)
+        .replaceAll(":", "_")
+        .replaceAll("/", "_");
+    return escapedFragmentPath;
   }
 }
