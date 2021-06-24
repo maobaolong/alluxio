@@ -164,7 +164,8 @@ public class HiveDatabase implements UnderDatabase {
     for (String tableName : tableNames) {
       try (CloseableResource<IMetaStoreClient> client = mClientPool.acquireClientResource()) {
         Table table = client.get().getTable(mHiveDbName, tableName);
-        List<Partition> partitions = client.get().listPartitions(mHiveDbName, table.getTableName(), (short) -1);
+        List<Partition> partitions =
+            client.get().listPartitions(mHiveDbName, table.getTableName(), (short) -1);
         tables.put(table, partitions);
       } catch (TException e) {
         throw new IOException(String.format(
