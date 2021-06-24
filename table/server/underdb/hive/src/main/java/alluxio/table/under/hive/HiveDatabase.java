@@ -31,9 +31,7 @@ import alluxio.table.common.udb.UdbUtils;
 import alluxio.table.common.udb.UnderDatabase;
 import alluxio.table.under.hive.util.HiveClientPoolCache;
 import alluxio.table.under.hive.util.HiveClientPool;
-import alluxio.util.io.PathUtils;
 
-import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Lists;
 import org.apache.hadoop.hive.common.FileUtils;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
@@ -52,7 +50,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -165,11 +162,9 @@ public class HiveDatabase implements UnderDatabase {
     List<String> tableNames = getTableNames();
     Map<Table, List<Partition>> tables = new HashMap<>(tableNames.size());
     for (String tableName : tableNames) {
-      Table table;
-      List<Partition> partitions;
       try (CloseableResource<IMetaStoreClient> client = mClientPool.acquireClientResource()) {
-        table = client.get().getTable(mHiveDbName, tableName);
-        partitions = client.get().listPartitions(mHiveDbName, table.getTableName(), (short) -1);
+        Table table = client.get().getTable(mHiveDbName, tableName);
+        List<Partition> partitions = client.get().listPartitions(mHiveDbName, table.getTableName(), (short) -1);
         tables.put(table, partitions);
       } catch (TException e) {
         throw new IOException(String.format(
@@ -187,7 +182,7 @@ public class HiveDatabase implements UnderDatabase {
 
   private void mount(List<Table> tables, UdbBypassSpec bypassSpec)
       throws IOException {
-    HashMultimap<AlluxioURI, Table> colocatedTables = HashMultimap.create();
+    HashSet<AlluxioURI> fragmentRootUfsUris = new HashSet<>();
     for (Table table : tables) {
       if (table.getSd() == null || table.getSd().getLocation() == null) {
         continue;
@@ -199,28 +194,10 @@ public class HiveDatabase implements UnderDatabase {
       }
       AlluxioURI tableUfsUri = new AlluxioURI(tableUfsPath);
       AlluxioURI rootUfsUri = new AlluxioURI(tableUfsUri, "/", false);
-      colocatedTables.put(rootUfsUri, table);
+      fragmentRootUfsUris.add(rootUfsUri);
     }
-    for (Map.Entry<AlluxioURI, Collection<Table>> entry : colocatedTables.asMap().entrySet()) {
-      AlluxioURI rootUfsUri = entry.getKey();
-      Collection<Table> childTables = entry.getValue();
-      AlluxioURI fragmentAlluxioUri = mUdbContext.getFragmentLocation(rootUfsUri);
-      try {
-        mPathTranslator.addMapping(
-            UdbUtils.mountFragment(mHiveDbName,
-                rootUfsUri,
-                fragmentAlluxioUri,
-                mUdbContext,
-                mConfiguration),
-            rootUfsUri.toString()
-        );
-      } catch (AlluxioException e) {
-        throw new IOException(String.format(
-            "Failed to mount database fragment. "
-            + "hiveUfsLocation: %s, AlluxioLocation: %s, error: %s",
-            rootUfsUri, fragmentAlluxioUri, e.getMessage()),
-            e);
-      }
+    for (AlluxioURI rootUfsUri : fragmentRootUfsUris) {
+      mountFragmentAndAddMapping(rootUfsUri);
     }
   }
 
@@ -230,10 +207,7 @@ public class HiveDatabase implements UnderDatabase {
     final String tableUfsPath = table.getSd().getLocation();
     final AlluxioURI tableUfsUri = new AlluxioURI(tableUfsPath);
     final AlluxioURI rootUfsUri = new AlluxioURI(tableUfsUri, "/", false);
-    // or: tableAlluxioUri = mUdbContext.getTableLocation(tableName) ???
-    final AlluxioURI tableAlluxioUri = new AlluxioURI(mPathTranslator.toAlluxioPath(tableUfsPath));
 
-    HashSet<Partition> colocatedPartitions = new HashSet<>(partitions.size());
     for (Partition part : partitions) {
       if (part.getSd() == null || part.getSd().getLocation() == null) {
         continue;
@@ -251,34 +225,36 @@ public class HiveDatabase implements UnderDatabase {
       } catch (InvalidPathException e) {
         throw new IOException(e);
       }
-      if (isAncestor) {
-        // case 1: partition is located in the directory tree of the table,
-        // action: put the partition into the group
-        colocatedPartitions.add(part);
-      } else if (mConfiguration.getBoolean(Property.ALLOW_DIFF_PART_LOC_PREFIX)) {
-        // case 2: partition is NOT located in the directory tree of the table,
+      if (!isAncestor && mConfiguration.getBoolean(Property.ALLOW_DIFF_PART_LOC_PREFIX)) {
+        // case 1: partition is NOT located on the same physical node with the parent table,
         // but config says mount it anyway
-        // action: mount it individually
-        AlluxioURI partitionAlluxioUri = new AlluxioURI(PathUtils.concatPath(
-            tableAlluxioUri.getPath(), partName));
-        try {
-          mPathTranslator.addMapping(
-              UdbUtils.mountAlluxioPath(tableName,
-                  partitionUfsUri,
-                  partitionAlluxioUri,
-                  mUdbContext,
-                  mConfiguration),
-              partitionUfsPath);
-        } catch (AlluxioException e) {
-          throw new IOException(String.format(
-              "Failed to mount partition. "
-              + "name: %s, hiveUfsLocation: %s, AlluxioLocation: %s, error: %s",
-              partName, partitionUfsUri, partitionAlluxioUri, e.getMessage()),
-              e);
-        }
+        // action: mount its containing fragment
+        mountFragmentAndAddMapping(rootUfsUri);
       }
-      // case 3: not co-located partition and table, and config not allowing them
+      // partition on the same node,
+      // or config not allowing mounting a partition on a different node
       // action: ignore it
+    }
+  }
+
+  private void mountFragmentAndAddMapping(AlluxioURI rootUfsUri)
+      throws IOException {
+    AlluxioURI fragmentAlluxioUri = mUdbContext.getFragmentLocation(rootUfsUri);
+    try {
+      mPathTranslator.addMapping(
+          UdbUtils.mountFragment(mHiveDbName,
+              rootUfsUri,
+              fragmentAlluxioUri,
+              mUdbContext,
+              mConfiguration),
+          rootUfsUri.toString()
+      );
+    } catch (AlluxioException e) {
+      throw new IOException(String.format(
+          "Failed to mount database fragment. "
+              + "hiveUfsLocation: %s, AlluxioLocation: %s, error: %s",
+          rootUfsUri, fragmentAlluxioUri, e.getMessage()),
+          e);
     }
   }
 
