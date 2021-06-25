@@ -23,7 +23,7 @@ import alluxio.resource.CloseableResource;
 import alluxio.table.common.UdbPartition;
 import alluxio.table.common.layout.HiveLayout;
 import alluxio.table.common.udb.PathTranslator;
-import alluxio.table.common.udb.UdbBypassSpec;
+import alluxio.table.common.udb.UdbInExClusionSpec;
 import alluxio.table.common.udb.UdbConfiguration;
 import alluxio.table.common.udb.UdbContext;
 import alluxio.table.common.udb.UdbTable;
@@ -158,8 +158,10 @@ public class HiveDatabase implements UnderDatabase {
    *
    * @param bypassSpec bypass spec
    */
-  private void mount(UdbBypassSpec bypassSpec) throws IOException {
-    List<String> tableNames = getTableNames();
+  private void mount(UdbInExClusionSpec bypassSpec) throws IOException {
+    List<String> tableNames = getTableNames().stream()
+        .filter(bypassSpec::hasIgnoredTable) // ignored tables should not be mounted
+        .collect(Collectors.toList());
     Map<Table, List<Partition>> tables = new HashMap<>(tableNames.size());
     for (String tableName : tableNames) {
       try (CloseableResource<IMetaStoreClient> client = mClientPool.acquireClientResource()) {
@@ -181,7 +183,7 @@ public class HiveDatabase implements UnderDatabase {
     }
   }
 
-  private void mount(List<Table> tables, UdbBypassSpec bypassSpec)
+  private void mount(List<Table> tables, UdbInExClusionSpec bypassSpec)
       throws IOException {
     HashSet<AlluxioURI> fragmentRootUfsUris = new HashSet<>();
     for (Table table : tables) {
@@ -189,7 +191,7 @@ public class HiveDatabase implements UnderDatabase {
         continue;
       }
       String tableUfsPath = table.getSd().getLocation();
-      if (bypassSpec.hasFullTable(table.getTableName())) {
+      if (bypassSpec.hasFullyBypassedTable(table.getTableName())) {
         mPathTranslator.addMapping(tableUfsPath, tableUfsPath);
         continue;
       }
@@ -202,7 +204,7 @@ public class HiveDatabase implements UnderDatabase {
     }
   }
 
-  private void mount(Table table, List<Partition> partitions, UdbBypassSpec bypassSpec)
+  private void mount(Table table, List<Partition> partitions, UdbInExClusionSpec bypassSpec)
       throws IOException {
     final String tableName = table.getTableName();
     final String tableUfsPath = table.getSd().getLocation();
@@ -216,7 +218,7 @@ public class HiveDatabase implements UnderDatabase {
       String partitionUfsPath = part.getSd().getLocation();
       AlluxioURI partitionUfsUri = new AlluxioURI(partitionUfsPath);
       String partName = makePartName(table, part);
-      if (bypassSpec.hasPartition(tableName, partName)) {
+      if (bypassSpec.hasBypassedPartition(tableName, partName)) {
         mPathTranslator.addMapping(partitionUfsPath, partitionUfsPath);
         continue;
       }
@@ -271,7 +273,7 @@ public class HiveDatabase implements UnderDatabase {
   }
 
   @Override
-  public UdbTable getTable(String tableName, UdbBypassSpec bypassSpec) throws IOException {
+  public UdbTable getTable(String tableName, UdbInExClusionSpec bypassSpec) throws IOException {
     try {
       Table table;
       List<Partition> partitions;
