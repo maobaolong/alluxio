@@ -21,14 +21,19 @@ public final class UdbInExClusionSpec {
   /**
    * Map of table name to set of partition names.
    * Keyed by a table's name, the value set contains names of partitions in that table.
-   * An empty set indicates all partitions of that table, if any, should be bypassed or ignored.
+   * An empty set indicates all partitions of that table, if any, should be bypassed.
    */
   private final Map<String, Set<String>> mBypassed;
+
+  /**
+   * Set of ignored tables.
+   * Tables are ignored as a whole, no partition configuration is needed.
+   */
   private final Set<String> mIgnored;
 
   /**
    * @param bypassed bypassed table to partition map
-   * @param ignored ignored table to partition map
+   * @param ignored ignored tables set
    */
   public UdbInExClusionSpec(Map<String, Set<String>> bypassed, Set<String> ignored) {
     mBypassed = bypassed;

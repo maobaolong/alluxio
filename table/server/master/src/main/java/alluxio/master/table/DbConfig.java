@@ -63,14 +63,14 @@ public final class DbConfig {
   }
 
   /**
-   * @return the {@link TablesEntry} from config file
+   * @return the {@link TablesEntry} for bypassed tables from config file
    */
   public TablesEntry getBypassEntry() {
     return mBypassEntry;
   }
 
   /**
-   * @return the {@link TablesEntry} from config file
+   * @return the {@link TablesEntry} for ignored tables from config file
    */
   public TablesEntry getIgnoreEntry() {
     return mIgnoreEntry;
