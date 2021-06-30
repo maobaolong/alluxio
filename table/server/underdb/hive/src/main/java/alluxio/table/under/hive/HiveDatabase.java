@@ -170,8 +170,8 @@ public class HiveDatabase implements UnderDatabase {
             client.get().listPartitions(mHiveDbName, table.getTableName(), (short) -1);
         tables.put(table, partitions);
       } catch (TException e) {
-        throw new IOException(String.format(
-            "Failed to get table %s and partitions of database %s", tableName, mHiveDbName));
+        LOG.error(
+            "Failed to get table {} and partitions of database {}", tableName, mHiveDbName);
       }
     }
 
