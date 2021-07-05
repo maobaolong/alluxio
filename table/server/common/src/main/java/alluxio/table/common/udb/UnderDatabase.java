@@ -52,4 +52,11 @@ public interface UnderDatabase {
    * @return get database info
    */
   DatabaseInfo getDatabaseInfo() throws IOException;
+
+  /**
+   * @param bypassSpec bypassSpec
+   * @throws IOException
+   */
+  default void mount(UdbInExClusionSpec bypassSpec, List<String> tableNames) throws IOException {
+  }
 }

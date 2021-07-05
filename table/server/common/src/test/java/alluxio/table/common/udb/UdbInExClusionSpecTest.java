@@ -25,7 +25,7 @@ public class UdbInExClusionSpecTest {
   public void tableAndPartitionNames() {
     UdbInExClusionSpec spec = new UdbInExClusionSpec(
         ImmutableMap.of("table1", ImmutableSet.of("part1", "part2")),
-        ImmutableSet.of());
+        ImmutableSet.of(), ImmutableSet.of());
     assertTrue(spec.hasBypassedTable("table1"));
     assertFalse(spec.hasFullyBypassedTable("table1"));
     assertTrue(spec.hasBypassedPartition("table1", "part1"));
@@ -37,7 +37,7 @@ public class UdbInExClusionSpecTest {
   public void tableNamesOnly() {
     UdbInExClusionSpec spec = new UdbInExClusionSpec(
         ImmutableMap.of("table2", ImmutableSet.of()),
-        ImmutableSet.of());
+        ImmutableSet.of(), ImmutableSet.of());
     assertTrue(spec.hasBypassedTable("table2"));
     assertTrue(spec.hasFullyBypassedTable("table2"));
     assertTrue(spec.hasBypassedPartition("table2", "part1"));
@@ -49,7 +49,7 @@ public class UdbInExClusionSpecTest {
   public void nonExistentTable() {
     UdbInExClusionSpec spec = new UdbInExClusionSpec(
         ImmutableMap.of("table3", ImmutableSet.of()),
-        ImmutableSet.of());
+        ImmutableSet.of(), ImmutableSet.of());
     assertFalse(spec.hasBypassedTable("table4"));
     assertFalse(spec.hasFullyBypassedTable("table4"));
     assertFalse(spec.hasBypassedPartition("table4", "part1"));
@@ -62,7 +62,7 @@ public class UdbInExClusionSpecTest {
   public void ignoredTables() {
     UdbInExClusionSpec spec = new UdbInExClusionSpec(
         ImmutableMap.of(),
-        ImmutableSet.of("table1"));
+        ImmutableSet.of("table1"), ImmutableSet.of());
     assertTrue(spec.hasIgnoredTable("table1"));
     assertEquals(ImmutableSet.of("table1"), spec.getIgnoredTables());
   }

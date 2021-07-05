@@ -32,12 +32,22 @@ public final class UdbInExClusionSpec {
   private final Set<String> mIgnored;
 
   /**
+   * Set of ignored tables.
+   * Tables are ignore excluded as a whole, no partition configuration is needed.
+   */
+  private final Set<String> mIgnoreExcluded;
+
+  /**
    * @param bypassed bypassed table to partition map
    * @param ignored ignored tables set
+   * @param ignoreExcluded ignore excluded tables set
    */
-  public UdbInExClusionSpec(Map<String, Set<String>> bypassed, Set<String> ignored) {
+  public UdbInExClusionSpec(Map<String, Set<String>> bypassed,
+      Set<String> ignored,
+      Set<String> ignoreExcluded) {
     mBypassed = bypassed;
     mIgnored = ignored;
+    mIgnoreExcluded = ignoreExcluded;
   }
 
   /**
@@ -74,10 +84,27 @@ public final class UdbInExClusionSpec {
   }
 
   /**
+   * Checks if a table is ignore excluded.
+   *
+   * @param tableName the table name
+   * @return true if the table is ignore excluded, false otherwise
+   */
+  public boolean hasIgnoreExcludedTable(String tableName) {
+    return mIgnoreExcluded.contains(tableName);
+  }
+
+  /**
    * @return tables ignored
    */
   public Set<String> getIgnoredTables() {
     return mIgnored;
+  }
+
+  /**
+   * @return tables ignore excluded
+   */
+  public Set<String> getIgnoreExcluded() {
+    return mIgnoreExcluded;
   }
 
   /**

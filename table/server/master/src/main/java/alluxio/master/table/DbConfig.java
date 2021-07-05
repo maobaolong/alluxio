@@ -41,16 +41,21 @@ import javax.annotation.Nullable;
 public final class DbConfig {
   private final TablesEntry mBypassEntry;
   private final TablesEntry mIgnoreEntry;
+  private final TablesEntry mIgnoreExcludeEntry;
 
   /**
    * @param bypassEntry bypass entry
    * @param ignoreEntry ignore entry
+   * @param ignoreExcludeEntry ignore-exclude entry
    */
   @JsonCreator
   public DbConfig(@JsonProperty("bypass") @Nullable TablesEntry bypassEntry,
-                  @JsonProperty("ignore") @Nullable TablesEntry ignoreEntry) {
+                  @JsonProperty("ignore") @Nullable TablesEntry ignoreEntry,
+                  @JsonProperty("ignore-exclude") @Nullable TablesEntry ignoreExcludeEntry) {
     mBypassEntry = bypassEntry == null ? new TablesEntry(Collections.emptySet()) : bypassEntry;
     mIgnoreEntry = ignoreEntry == null ? new TablesEntry(Collections.emptySet()) : ignoreEntry;
+    mIgnoreExcludeEntry = ignoreExcludeEntry == null
+        ? new TablesEntry(Collections.emptySet()) : ignoreExcludeEntry;
   }
 
   /**
@@ -59,7 +64,7 @@ public final class DbConfig {
    * @return an empty config instance
    */
   public static DbConfig empty() {
-    return new DbConfig(null, null);
+    return new DbConfig(null, null, null);
   }
 
   /**
@@ -77,13 +82,21 @@ public final class DbConfig {
   }
 
   /**
+   * @return the {@link TablesEntry} for ignore exclude tables from config file
+   */
+  public TablesEntry getIgnoreExcludeEntry() {
+    return mIgnoreExcludeEntry;
+  }
+
+  /**
    * @return the {@link UdbInExClusionSpec} object
    */
   public UdbInExClusionSpec getUdbInExClusionSpec() {
     Map<String, Set<String>> bypassed = mBypassEntry.getTableEntries().stream().collect(
         Collectors.toMap(TableEntry::getTable, TableEntry::getPartitions));
     Set<String> ignored = mIgnoreEntry.getTableNames();
-    return new UdbInExClusionSpec(bypassed, ignored);
+    Set<String> ignoreExcluded = mIgnoreExcludeEntry.getTableNames();
+    return new UdbInExClusionSpec(bypassed, ignored, ignoreExcluded);
   }
 
   /**

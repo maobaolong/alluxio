@@ -74,7 +74,6 @@ public class HiveDatabase implements UnderDatabase {
   private final String mHiveDbName;
   /** path translator that records mappings between ufs paths and Alluxio paths. */
   private final PathTranslator mPathTranslator;
-  private boolean mIsMounted;
 
   private static final HiveClientPoolCache CLIENT_POOL_CACHE = new HiveClientPoolCache();
   /** Hive client is not thread-safe, so use a client pool for concurrency. */
@@ -88,7 +87,6 @@ public class HiveDatabase implements UnderDatabase {
     mHiveDbName = hiveDbName;
     mClientPool = CLIENT_POOL_CACHE.getPool(connectionUri);
     mPathTranslator = new PathTranslator();
-    mIsMounted = false;
   }
 
   /**
@@ -157,12 +155,9 @@ public class HiveDatabase implements UnderDatabase {
    * (if applicable) within this database to Alluxio filesystem.
    *
    * @param bypassSpec bypass spec
+   * @param tableNames table names
    */
-  private void mount(UdbInExClusionSpec bypassSpec) throws IOException {
-    List<String> tableNames = getTableNames().stream()
-        // ignored tables should not be mounted
-        .filter((tableName) -> !bypassSpec.hasIgnoredTable(tableName))
-        .collect(Collectors.toList());
+  public void mount(UdbInExClusionSpec bypassSpec, List<String> tableNames) throws IOException {
     Map<Table, List<Partition>> tables = new HashMap<>(tableNames.size());
     for (String tableName : tableNames) {
       try (CloseableResource<IMetaStoreClient> client = mClientPool.acquireClientResource()) {
@@ -312,12 +307,6 @@ public class HiveDatabase implements UnderDatabase {
                   e -> e.getValue().stream().map(HiveUtils::toProto).collect(Collectors.toList()),
                   (e1, e2) -> e2)));
         }
-      }
-
-      if (!mIsMounted) {
-        // TODO(bowen): bypass spec updates are ignored
-        mount(bypassSpec);
-        mIsMounted = true;
       }
       List<ColumnStatisticsInfo> colStats =
           columnStats.stream().map(HiveUtils::toProto).collect(Collectors.toList());

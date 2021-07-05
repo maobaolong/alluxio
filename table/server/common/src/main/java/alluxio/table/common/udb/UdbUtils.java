@@ -15,6 +15,7 @@ import alluxio.AlluxioURI;
 import alluxio.Constants;
 import alluxio.exception.AlluxioException;
 import alluxio.exception.InvalidPathException;
+import alluxio.exception.status.InvalidArgumentException;
 import alluxio.grpc.CreateDirectoryPOptions;
 import alluxio.grpc.MountPOptions;
 
@@ -84,7 +85,7 @@ public class UdbUtils {
       LOG.debug("Trying to mount ufs location {}, but it is already mounted at location {}",
           ufsUri, alluxioUri);
       return alluxioUri.getPath();
-    } catch (InvalidPathException e) {
+    } catch (InvalidPathException | InvalidArgumentException e) {
       // ufs path not mounted, continue
     }
     // make sure the parent exists
